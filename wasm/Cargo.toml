@@ -20,6 +20,8 @@ features = [
   'Document',
   'Element',
   'HtmlElement',
+  'HtmlDivElement',
+  'HtmlCanvasElement',
   'Node',
   'Window',
   'CssStyleDeclaration',
@@ -28,7 +30,6 @@ features = [
   'RequestInit',
   'RequestMode',
   'Response',
-  'HtmlCanvasElement',
   'CanvasRenderingContext2d',
   'ImageData',
   'MouseEvent'
