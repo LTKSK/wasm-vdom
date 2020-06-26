@@ -2,7 +2,7 @@ extern crate wasm_bindgen;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 extern crate web_sys;
-//use web_sys::{Document, Element, HtmlElement, Window};
+use web_sys::{Document, Element, HtmlElement, Node, Window};
 
 #[wasm_bindgen]
 pub fn greeting() -> String {
@@ -19,12 +19,14 @@ enum VNodeType {
 #[derive(Debug)]
 enum NodeType {
     Div,
+    Button,
 }
 
 impl NodeType {
     pub fn name(&self) -> &str {
         match self {
             Self::Div => "div",
+            Self::Button => "button",
         }
     }
 }
@@ -69,10 +71,22 @@ struct VNode {
 //    })
 //}
 
-fn render_dom(contaner: &JsValue, root: VNode) -> Result<(), JsValue> {
+fn create_element(vnode: VNode) -> web_sys::Node {
     // 受け取ったVNodeをもとに、DOMツリーを構築する
-    // create_element("div", Props::new("id".to_string()): })
-    Ok(())
+    let document = web_sys::window().unwrap().document().unwrap();
+    match vnode.vnode_type {
+        VNodeType::TextElement => {
+            let element = document.create_text_node(&vnode.value);
+            element.into()
+        }
+        VNodeType::Element => {
+            let element = document.create_element(&vnode.node_type.name()).unwrap();
+            for child in vnode.children {
+                element.append_child(&create_element(child));
+            }
+            element.into()
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -93,34 +107,42 @@ pub fn render(id: &str) -> Result<(), JsValue> {
                 children: vec![],
             },
             VNode {
-                vnode_type: VNodeType::TextElement,
+                vnode_type: VNodeType::Element,
                 props: Props::new(),
                 node_type: NodeType::Div,
                 value: "child2だよん".to_string(),
-                children: vec![],
+                children: vec![VNode {
+                    vnode_type: VNodeType::Element,
+                    props: Props::new(),
+                    node_type: NodeType::Div,
+                    value: "".to_string(),
+                    children: vec![
+                        VNode {
+                            vnode_type: VNodeType::TextElement,
+                            props: Props::new(),
+                            node_type: NodeType::Div,
+                            value: "child2のchild2だよん".to_string(),
+                            children: vec![],
+                        },
+                        VNode {
+                            vnode_type: VNodeType::Element,
+                            props: Props::new(),
+                            node_type: NodeType::Button,
+                            value: "".to_string(),
+                            children: vec![],
+                        },
+                        VNode {
+                            vnode_type: VNodeType::TextElement,
+                            props: Props::new(),
+                            node_type: NodeType::Div,
+                            value: "child2のchild2だよん".to_string(),
+                            children: vec![],
+                        },
+                    ],
+                }],
             },
         ],
     };
-
-    // containerのdomは引数として既にある状態
-    // propsの情報を、dom[name] = valueとして詰めていかないといけない
-    // containerに対して、childrenをappendChildしていく必要がある
-    let node = document.create_element(&vnode.node_type.name())?;
-    for child in &vnode.children {
-        match child.vnode_type {
-            VNodeType::Element => {
-                let child_node = document.create_element(child.node_type.name())?;
-                child_node.set_inner_html(&child.value);
-                node.append_child(&child_node)?;
-            }
-            VNodeType::TextElement => {
-                // なぜかcreate_text_nodeが見つからない
-                let child_node = document.create_element("text")?;
-                child_node.set_text_content(Some(&child.value));
-                node.append_child(&child_node)?;
-            }
-        }
-    }
-    container.append_child(&node)?;
+    container.append_child(&create_element(vnode))?;
     Ok(())
 }
