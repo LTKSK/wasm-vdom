@@ -49,28 +49,6 @@ struct VNode {
     children: Vec<VNode>,
 }
 
-//fn create_element(vnode_type: VNodeType, props: Props, children: Vec<VNode>) ->
-//Option<web_sys::Node> {
-//    // まずは決め打ちでElementを作って、これをrender関数にぶん投げたら
-//    // domができる
-//    // という形を実装して、その後ちゃんとした関数にする
-//    // それもできたら差分チェックを作る
-//    // 最初はdivとtextだけ
-//    Some(VNode {
-//        vnode_type,
-//        props,
-//        node_type: NodeType::Div,
-//        value: "".to_string(),
-//        children: vec![VNode {
-//            vnode_type: VNodeType::Element,
-//            props: Props::new(),
-//            node_type: NodeType::Div,
-//            value: "testだよん".to_string(),
-//            children: vec![],
-//        }],
-//    })
-//}
-
 fn create_element(vnode: VNode) -> web_sys::Node {
     // 受け取ったVNodeをもとに、DOMツリーを構築する
     let document = web_sys::window().unwrap().document().unwrap();
@@ -81,6 +59,7 @@ fn create_element(vnode: VNode) -> web_sys::Node {
         }
         VNodeType::Element => {
             let element = document.create_element(&vnode.node_type.name()).unwrap();
+            element.set_inner_html(&vnode.value);
             for child in vnode.children {
                 element.append_child(&create_element(child));
             }
@@ -89,9 +68,13 @@ fn create_element(vnode: VNode) -> web_sys::Node {
     }
 }
 
+// render発火用のフラグ
+static shouldRender: bool = false;
+
 #[wasm_bindgen]
 pub fn render(id: &str) -> Result<(), JsValue> {
-    let document = web_sys::window().unwrap().document().unwrap();
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
     let container = document.get_element_by_id(id).expect("no id `container`");
     let vnode = VNode {
         vnode_type: VNodeType::Element,
@@ -103,14 +86,14 @@ pub fn render(id: &str) -> Result<(), JsValue> {
                 vnode_type: VNodeType::TextElement,
                 props: Props::new(),
                 node_type: NodeType::Div,
-                value: "child1だよん".to_string(),
+                value: "child1だよ".to_string(),
                 children: vec![],
             },
             VNode {
                 vnode_type: VNodeType::Element,
                 props: Props::new(),
                 node_type: NodeType::Div,
-                value: "child2だよん".to_string(),
+                value: "child2だよ".to_string(),
                 children: vec![VNode {
                     vnode_type: VNodeType::Element,
                     props: Props::new(),
@@ -121,21 +104,21 @@ pub fn render(id: &str) -> Result<(), JsValue> {
                             vnode_type: VNodeType::TextElement,
                             props: Props::new(),
                             node_type: NodeType::Div,
-                            value: "child2のchild2だよん".to_string(),
+                            value: "child2のchild2だよ".to_string(),
                             children: vec![],
                         },
                         VNode {
                             vnode_type: VNodeType::Element,
                             props: Props::new(),
                             node_type: NodeType::Button,
-                            value: "".to_string(),
+                            value: "ボタンだよ".to_string(),
                             children: vec![],
                         },
                         VNode {
                             vnode_type: VNodeType::TextElement,
                             props: Props::new(),
                             node_type: NodeType::Div,
-                            value: "child2のchild2だよん".to_string(),
+                            value: "child2のchild2だよ".to_string(),
                             children: vec![],
                         },
                     ],
@@ -143,6 +126,7 @@ pub fn render(id: &str) -> Result<(), JsValue> {
             },
         ],
     };
+    //window.request_idle_callback(Closure::wrap(Box::new(|| "hoge") as Box<dyn Fn()>))?;
     container.append_child(&create_element(vnode))?;
     Ok(())
 }
