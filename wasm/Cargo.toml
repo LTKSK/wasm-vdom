@@ -33,6 +33,7 @@ features = [
   'Response',
   'CanvasRenderingContext2d',
   'ImageData',
-  'MouseEvent'
+  'MouseEvent',
+  'console',
 ]
 

@@ -1,6 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
 extern crate wasm_bindgen;
 use std::collections::HashMap;
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, JsCast};
 extern crate web_sys;
 use web_sys::{Document, Element, HtmlElement, Node, Window};
 
@@ -44,7 +45,6 @@ type Props = HashMap<String, NodeValue>;
 struct VNode {
     vnode_type: VNodeType,
     node_type: NodeType,
-    props: Props,
     value: String,
     children: Vec<VNode>,
 }
@@ -61,7 +61,7 @@ fn create_element(vnode: VNode) -> web_sys::Node {
             let element = document.create_element(&vnode.node_type.name()).unwrap();
             element.set_inner_html(&vnode.value);
             for child in vnode.children {
-                element.append_child(&create_element(child));
+                element.append_child(&create_element(child)).unwrap();
             }
             element.into()
         }
@@ -69,54 +69,54 @@ fn create_element(vnode: VNode) -> web_sys::Node {
 }
 
 // render発火用のフラグ
-static shouldRender: bool = false;
+static should_render: bool = false;
+
+fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+    web_sys::window()
+        .unwrap()
+        .request_animation_frame(f.as_ref().unchecked_ref())
+        .expect("should register `requestAnimationFrame` ");
+}
 
 #[wasm_bindgen]
 pub fn render(id: &str) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let container = document.get_element_by_id(id).expect("no id `container`");
-    let vnode = VNode {
+    let mut vnode = VNode {
         vnode_type: VNodeType::Element,
         node_type: NodeType::Div,
-        props: Props::new(),
         value: "".to_string(),
         children: vec![
             VNode {
                 vnode_type: VNodeType::TextElement,
-                props: Props::new(),
                 node_type: NodeType::Div,
                 value: "child1だよ".to_string(),
                 children: vec![],
             },
             VNode {
                 vnode_type: VNodeType::Element,
-                props: Props::new(),
                 node_type: NodeType::Div,
                 value: "child2だよ".to_string(),
                 children: vec![VNode {
                     vnode_type: VNodeType::Element,
-                    props: Props::new(),
                     node_type: NodeType::Div,
                     value: "".to_string(),
                     children: vec![
                         VNode {
                             vnode_type: VNodeType::TextElement,
-                            props: Props::new(),
                             node_type: NodeType::Div,
                             value: "child2のchild2だよ".to_string(),
                             children: vec![],
                         },
                         VNode {
                             vnode_type: VNodeType::Element,
-                            props: Props::new(),
                             node_type: NodeType::Button,
                             value: "ボタンだよ".to_string(),
                             children: vec![],
                         },
                         VNode {
                             vnode_type: VNodeType::TextElement,
-                            props: Props::new(),
                             node_type: NodeType::Div,
                             value: "child2のchild2だよ".to_string(),
                             children: vec![],
@@ -126,7 +126,27 @@ pub fn render(id: &str) -> Result<(), JsValue> {
             },
         ],
     };
-    //window.request_idle_callback(Closure::wrap(Box::new(|| "hoge") as Box<dyn Fn()>))?;
-    container.append_child(&create_element(vnode))?;
+
+    // Closureで上書きするのでNoneで良い
+    let f = Rc::new(RefCell::new(None));
+    let g = f.clone();
+    let mut i = 0;
+    *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+        if i > 300 {
+            // ここでtakeして明示的に参照の寿命を終わらせてる?
+            let _ = f.borrow_mut().take();
+            return;
+        }
+        i += 1;
+        web_sys::console::log_1(&"hoge".into());
+        request_animation_frame(f.borrow().as_ref().unwrap());
+    }) as Box<dyn FnMut()>));
+    request_animation_frame(g.borrow().as_ref().unwrap());
+
+    // 子供があったら入れ替え、なかったらappend
+    match container.first_child() {
+        Some(first_child) => container.replace_child(&create_element(vnode), &first_child)?,
+        None => container.append_child(&create_element(vnode))?,
+    };
     Ok(())
 }
