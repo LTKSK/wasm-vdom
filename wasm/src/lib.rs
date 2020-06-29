@@ -49,7 +49,7 @@ struct VNode {
     children: Vec<VNode>,
 }
 
-fn create_element(vnode: VNode) -> web_sys::Node {
+fn create_element(vnode: &VNode) -> web_sys::Node {
     // 受け取ったVNodeをもとに、DOMツリーを構築する
     let document = web_sys::window().unwrap().document().unwrap();
     match vnode.vnode_type {
@@ -60,8 +60,8 @@ fn create_element(vnode: VNode) -> web_sys::Node {
         VNodeType::Element => {
             let element = document.create_element(&vnode.node_type.name()).unwrap();
             element.set_inner_html(&vnode.value);
-            for child in vnode.children {
-                element.append_child(&create_element(child)).unwrap();
+            for child in &vnode.children {
+                element.append_child(&create_element(&child)).unwrap();
             }
             element.into()
         }
@@ -83,7 +83,51 @@ pub fn render(id: &str) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let container = document.get_element_by_id(id).expect("no id `container`");
-    let vnode = VNode {
+    //let vnode = VNode {
+    //    vnode_type: VNodeType::Element,
+    //    node_type: NodeType::Div,
+    //    value: "".to_string(),
+    //    children: vec![
+    //        VNode {
+    //            vnode_type: VNodeType::TextElement,
+    //            node_type: NodeType::Div,
+    //            value: "child1だよ".to_string(),
+    //            children: vec![],
+    //        },
+    //        VNode {
+    //            vnode_type: VNodeType::Element,
+    //            node_type: NodeType::Div,
+    //            value: "child2だよ".to_string(),
+    //            children: vec![VNode {
+    //                vnode_type: VNodeType::Element,
+    //                node_type: NodeType::Div,
+    //                value: "".to_string(),
+    //                children: vec![
+    //                    VNode {
+    //                        vnode_type: VNodeType::TextElement,
+    //                        node_type: NodeType::Div,
+    //                        value: "child2のchild2だよ".to_string(),
+    //                        children: vec![],
+    //                    },
+    //                    VNode {
+    //                        vnode_type: VNodeType::Element,
+    //                        node_type: NodeType::Button,
+    //                        value: "ボタンだよ".to_string(),
+    //                        children: vec![],
+    //                    },
+    //                    VNode {
+    //                        vnode_type: VNodeType::TextElement,
+    //                        node_type: NodeType::Div,
+    //                        value: "child2のchild2だよ".to_string(),
+    //                        children: vec![],
+    //                    },
+    //                ],
+    //            }],
+    //        },
+    //    ],
+    //};
+
+    let v = Rc::new(RefCell::new(VNode {
         vnode_type: VNodeType::Element,
         node_type: NodeType::Div,
         value: "".to_string(),
@@ -125,17 +169,11 @@ pub fn render(id: &str) -> Result<(), JsValue> {
                 }],
             },
         ],
-    };
-
-    let v = Rc::new(RefCell::new(VNode {
-        vnode_type: VNodeType::TextElement,
-        node_type: NodeType::Div,
-        value: "child2のchild2だよ".to_string(),
-        children: vec![],
     }));
-    let borrowed_vnode = v.clone();
+    let vnode = v.clone();
     // Closureで上書きするのでNoneで良い
     let f = Rc::new(RefCell::new(None));
+    // cloneで手に入るのはRefCellの参照
     let g = f.clone();
     let mut i = 0;
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
@@ -145,15 +183,16 @@ pub fn render(id: &str) -> Result<(), JsValue> {
             return;
         }
         i += 1;
-        web_sys::console::log_1(&borrowed_vnode.borrow().node_type.name().into());
+        let vv = &*vnode.borrow();
+        // 子供があったら入れ替え、なかったらappend
+        match container.first_child() {
+            Some(first_child) => container
+                .replace_child(&create_element(vv), &first_child)
+                .unwrap(),
+            None => container.append_child(&create_element(vv)).unwrap(),
+        };
         request_animation_frame(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut()>));
     request_animation_frame(g.borrow().as_ref().unwrap());
-
-    // 子供があったら入れ替え、なかったらappend
-    match container.first_child() {
-        Some(first_child) => container.replace_child(&create_element(vnode), &first_child)?,
-        None => container.append_child(&create_element(vnode))?,
-    };
     Ok(())
 }
