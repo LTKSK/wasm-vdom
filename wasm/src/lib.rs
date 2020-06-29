@@ -39,7 +39,7 @@ enum NodeValue {
     boolean(bool),
 }
 
-type Props = HashMap<String, NodeValue>;
+//type Props = HashMap<String, NodeValue>;
 
 #[derive(Debug)]
 struct VNode {
@@ -83,7 +83,7 @@ pub fn render(id: &str) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let container = document.get_element_by_id(id).expect("no id `container`");
-    let mut vnode = VNode {
+    let vnode = VNode {
         vnode_type: VNodeType::Element,
         node_type: NodeType::Div,
         value: "".to_string(),
@@ -127,18 +127,25 @@ pub fn render(id: &str) -> Result<(), JsValue> {
         ],
     };
 
+    let v = Rc::new(RefCell::new(VNode {
+        vnode_type: VNodeType::TextElement,
+        node_type: NodeType::Div,
+        value: "child2のchild2だよ".to_string(),
+        children: vec![],
+    }));
+    let borrowed_vnode = v.clone();
     // Closureで上書きするのでNoneで良い
     let f = Rc::new(RefCell::new(None));
     let g = f.clone();
     let mut i = 0;
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        if i > 300 {
-            // ここでtakeして明示的に参照の寿命を終わらせてる?
+        if i > 100 {
+            // closureのcleanup
             let _ = f.borrow_mut().take();
             return;
         }
         i += 1;
-        web_sys::console::log_1(&"hoge".into());
+        web_sys::console::log_1(&borrowed_vnode.borrow().node_type.name().into());
         request_animation_frame(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut()>));
     request_animation_frame(g.borrow().as_ref().unwrap());
