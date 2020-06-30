@@ -83,51 +83,8 @@ pub fn render(id: &str) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let container = document.get_element_by_id(id).expect("no id `container`");
-    //let vnode = VNode {
-    //    vnode_type: VNodeType::Element,
-    //    node_type: NodeType::Div,
-    //    value: "".to_string(),
-    //    children: vec![
-    //        VNode {
-    //            vnode_type: VNodeType::TextElement,
-    //            node_type: NodeType::Div,
-    //            value: "child1だよ".to_string(),
-    //            children: vec![],
-    //        },
-    //        VNode {
-    //            vnode_type: VNodeType::Element,
-    //            node_type: NodeType::Div,
-    //            value: "child2だよ".to_string(),
-    //            children: vec![VNode {
-    //                vnode_type: VNodeType::Element,
-    //                node_type: NodeType::Div,
-    //                value: "".to_string(),
-    //                children: vec![
-    //                    VNode {
-    //                        vnode_type: VNodeType::TextElement,
-    //                        node_type: NodeType::Div,
-    //                        value: "child2のchild2だよ".to_string(),
-    //                        children: vec![],
-    //                    },
-    //                    VNode {
-    //                        vnode_type: VNodeType::Element,
-    //                        node_type: NodeType::Button,
-    //                        value: "ボタンだよ".to_string(),
-    //                        children: vec![],
-    //                    },
-    //                    VNode {
-    //                        vnode_type: VNodeType::TextElement,
-    //                        node_type: NodeType::Div,
-    //                        value: "child2のchild2だよ".to_string(),
-    //                        children: vec![],
-    //                    },
-    //                ],
-    //            }],
-    //        },
-    //    ],
-    //};
 
-    let v = Rc::new(RefCell::new(VNode {
+    let vnode_rc = Rc::new(RefCell::new(VNode {
         vnode_type: VNodeType::Element,
         node_type: NodeType::Div,
         value: "".to_string(),
@@ -170,7 +127,7 @@ pub fn render(id: &str) -> Result<(), JsValue> {
             },
         ],
     }));
-    let vnode = v.clone();
+    let vnode = vnode_rc.clone();
     // Closureで上書きするのでNoneで良い
     let f = Rc::new(RefCell::new(None));
     // cloneで手に入るのはRefCellの参照
@@ -183,7 +140,7 @@ pub fn render(id: &str) -> Result<(), JsValue> {
             return;
         }
         i += 1;
-        let vv = &*vnode.borrow();
+        let vv = &vnode.borrow();
         // 子供があったら入れ替え、なかったらappend
         match container.first_child() {
             Some(first_child) => container
