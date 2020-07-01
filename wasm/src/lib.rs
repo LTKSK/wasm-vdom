@@ -1,9 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 extern crate wasm_bindgen;
-use std::collections::HashMap;
 use wasm_bindgen::{prelude::*, JsCast};
 extern crate web_sys;
-use web_sys::{Document, Element, HtmlElement, Node, Window};
+//use web_sys::{Document, Element, HtmlElement, Node, Window};
 
 #[wasm_bindgen]
 pub fn greeting() -> String {
@@ -33,19 +32,12 @@ impl NodeType {
 }
 
 #[derive(Debug)]
-enum NodeValue {
-    number(f32),
-    string(String),
-    boolean(bool),
-}
-
-//type Props = HashMap<String, NodeValue>;
-
-#[derive(Debug)]
 struct VNode {
     vnode_type: VNodeType,
     node_type: NodeType,
     value: String,
+    // TODO: eventHandlerに対応する
+    attributes: Vec<(String, String)>,
     children: Vec<VNode>,
 }
 
@@ -60,6 +52,10 @@ fn create_element(vnode: &VNode) -> web_sys::Node {
         VNodeType::Element => {
             let element = document.create_element(&vnode.node_type.name()).unwrap();
             element.set_inner_html(&vnode.value);
+            //attributesの適用
+            for (key, value) in &vnode.attributes {
+                element.set_attribute(&key, &value);
+            }
             for child in &vnode.children {
                 element.append_child(&create_element(&child)).unwrap();
             }
@@ -87,39 +83,46 @@ pub fn render(id: &str) -> Result<(), JsValue> {
     let vnode_rc = Rc::new(RefCell::new(VNode {
         vnode_type: VNodeType::Element,
         node_type: NodeType::Div,
-        value: "".to_string(),
+        value: "topノード".to_string(),
+        attributes: vec![("id".to_string(), "hoge".to_string())],
         children: vec![
             VNode {
                 vnode_type: VNodeType::TextElement,
                 node_type: NodeType::Div,
                 value: "child1だよ".to_string(),
+                attributes: vec![],
                 children: vec![],
             },
             VNode {
                 vnode_type: VNodeType::Element,
                 node_type: NodeType::Div,
                 value: "child2だよ".to_string(),
+                attributes: vec![],
                 children: vec![VNode {
                     vnode_type: VNodeType::Element,
                     node_type: NodeType::Div,
                     value: "".to_string(),
+                    attributes: vec![],
                     children: vec![
                         VNode {
                             vnode_type: VNodeType::TextElement,
                             node_type: NodeType::Div,
                             value: "child2のchild2だよ".to_string(),
+                            attributes: vec![],
                             children: vec![],
                         },
                         VNode {
                             vnode_type: VNodeType::Element,
                             node_type: NodeType::Button,
                             value: "ボタンだよ".to_string(),
+                            attributes: vec![],
                             children: vec![],
                         },
                         VNode {
                             vnode_type: VNodeType::TextElement,
                             node_type: NodeType::Div,
                             value: "child2のchild2だよ".to_string(),
+                            attributes: vec![],
                             children: vec![],
                         },
                     ],
@@ -127,6 +130,7 @@ pub fn render(id: &str) -> Result<(), JsValue> {
             },
         ],
     }));
+
     let vnode = vnode_rc.clone();
     // Closureで上書きするのでNoneで良い
     let f = Rc::new(RefCell::new(None));
