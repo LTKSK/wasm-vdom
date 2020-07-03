@@ -36,11 +36,11 @@ enum EventHandler {
 
 struct VNode {
     vnode_type: VNodeType,
-    node_type: NodeType,
-    value: String,
+    node_type: NodeType, //tag_nameとかでも良いかも
+    value: &'static str,
     attributes: Vec<(String, String)>,
-    //event_handlers: Vec<(EventHandler, Closure<dyn FnMut(web_sys::MouseEvent)>)>,
-    event_handlers: Vec<(EventHandler, Box<dyn FnMut(web_sys::MouseEvent)>)>,
+    //event_handlers: Vec<(EventHandler, Closure<dyn FnMut(web_sys::Event)>)>,
+    event_handlers: Vec<(EventHandler, Box<dyn FnMut(web_sys::Event)>)>,
     children: Vec<VNode>,
 }
 
@@ -60,17 +60,19 @@ fn create_element(vnode: &VNode) -> web_sys::Node {
                 element.set_attribute(&key, &value).unwrap();
             }
 
+            // TODO implement event handler
             //for (event, handler) in &vnode.event_handlers {
-            //    let handler = Closure::wrap(handler);
-            //    match event {
-            //        EventHandler::OnClick => element
+            //let handler = Closure::wrap(handler);
+            //match event {
+            //    EventHandler::OnClick => {
+            //        element
             //            .add_event_listener_with_callback(
             //                "click",
             //                &handler.as_ref().unchecked_ref(),
             //            )
-            //            .unwrap(),
-            //    };
-            //    handler.forget();
+            //            .unwrap();
+            //    }
+            //};
             //}
 
             for child in &vnode.children {
@@ -81,14 +83,18 @@ fn create_element(vnode: &VNode) -> web_sys::Node {
     }
 }
 
-// render発火用のフラグ
-//static should_render: bool = false;
+//fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+//    web_sys::window()
+//        .unwrap()
+//        .request_animation_frame(f.as_ref().unchecked_ref())
+//        .expect("should register `requestAnimationFrame` ");
+//}
 
-fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+fn request_idle_callback(f: &Closure<dyn FnMut()>) {
     web_sys::window()
         .unwrap()
-        .request_animation_frame(f.as_ref().unchecked_ref())
-        .expect("should register `requestAnimationFrame` ");
+        .request_idle_callback(f.as_ref().unchecked_ref())
+        .expect("should register `requestIdleCallback` ");
 }
 
 #[wasm_bindgen]
@@ -97,23 +103,23 @@ pub fn render(id: &str) -> Result<(), JsValue> {
     let document = window.document().unwrap();
     let container = document.get_element_by_id(id).expect("no id `container`");
 
+    let closure = Box::new(move |event: web_sys::Event| {
+        web_sys::console::log_1(&"onclick!".into());
+    }) as Box<dyn FnMut(_)>;
     //let closure = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
     //    web_sys::console::log_1(&"onclick!".into());
     //}) as Box<dyn FnMut(_)>);
-    let closure = Box::new(move |event: web_sys::MouseEvent| {
-        web_sys::console::log_1(&"onclick!".into());
-    }) as Box<dyn FnMut(_)>;
     let vnode_rc = Rc::new(RefCell::new(VNode {
         vnode_type: VNodeType::Element,
         node_type: NodeType::Div,
-        value: "topノード".to_string(),
+        value: "topノード",
         attributes: vec![("id".to_string(), "hoge".to_string())],
         event_handlers: vec![],
         children: vec![
             VNode {
                 vnode_type: VNodeType::TextElement,
                 node_type: NodeType::Div,
-                value: "child1だよ".to_string(),
+                value: "child1だよ",
                 attributes: vec![],
                 event_handlers: vec![],
                 children: vec![],
@@ -121,19 +127,19 @@ pub fn render(id: &str) -> Result<(), JsValue> {
             VNode {
                 vnode_type: VNodeType::Element,
                 node_type: NodeType::Div,
-                value: "child2だよ".to_string(),
+                value: "child2だよ",
                 attributes: vec![],
                 event_handlers: vec![],
                 children: vec![VNode {
                     vnode_type: VNodeType::Element,
                     node_type: NodeType::Div,
-                    value: "".to_string(),
+                    value: "",
                     attributes: vec![],
                     event_handlers: vec![],
                     children: vec![VNode {
                         vnode_type: VNodeType::Element,
                         node_type: NodeType::Button,
-                        value: "ボタンだよ".to_string(),
+                        value: "ボタンだよ",
                         attributes: vec![],
                         event_handlers: vec![(EventHandler::OnClick, closure)],
                         children: vec![],
@@ -144,19 +150,12 @@ pub fn render(id: &str) -> Result<(), JsValue> {
     }));
 
     let vnode = vnode_rc.clone();
-    // Closureで上書きするのでNoneで良い
+    // Option<Closure>を後で入れる
     let f = Rc::new(RefCell::new(None));
     // cloneで手に入るのはRefCellの参照
     let g = f.clone();
-    let mut i = 0;
-    // NoneでRefCellを作っているのでSomeでくくるっぽい
+    // NoneでRefCellを作っているのでSomeでくくる
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        if i > 100 {
-            // closureのcleanup
-            let _ = f.borrow_mut().take();
-            return;
-        }
-        i += 1;
         let v = &vnode.borrow();
         match container.first_child() {
             Some(first_child) => container
@@ -164,8 +163,8 @@ pub fn render(id: &str) -> Result<(), JsValue> {
                 .unwrap(),
             None => container.append_child(&create_element(v)).unwrap(),
         };
-        request_animation_frame(f.borrow().as_ref().unwrap());
+        request_idle_callback(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut()>));
-    request_animation_frame(g.borrow().as_ref().unwrap());
+    request_idle_callback(g.borrow().as_ref().unwrap());
     Ok(())
 }
