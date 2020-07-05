@@ -60,20 +60,25 @@ fn create_element(vnode: &VNode) -> web_sys::Node {
                 element.set_attribute(&key, &value).unwrap();
             }
 
-            // TODO implement event handler
-            //for (event, handler) in &vnode.event_handlers {
-            //let handler = Closure::wrap(handler);
-            //match event {
-            //    EventHandler::OnClick => {
-            //        element
-            //            .add_event_listener_with_callback(
-            //                "click",
-            //                &handler.as_ref().unchecked_ref(),
-            //            )
-            //            .unwrap();
-            //    }
-            //};
-            //}
+            for (event, handler) in &vnode.event_handlers {
+                //let closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
+                //}) as Box<dyn FnMut(_)>);
+                let closure = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
+                    web_sys::console::log_1(&"onclick!".into());
+                }) as Box<dyn FnMut(_)>);
+
+                match event {
+                    EventHandler::OnClick => {
+                        element
+                            .add_event_listener_with_callback(
+                                "click",
+                                &closure.as_ref().unchecked_ref(),
+                            )
+                            .unwrap();
+                    }
+                };
+                closure.forget();
+            }
 
             for child in &vnode.children {
                 element.append_child(&create_element(&child)).unwrap();
@@ -83,13 +88,6 @@ fn create_element(vnode: &VNode) -> web_sys::Node {
     }
 }
 
-//fn request_animation_frame(f: &Closure<dyn FnMut()>) {
-//    web_sys::window()
-//        .unwrap()
-//        .request_animation_frame(f.as_ref().unchecked_ref())
-//        .expect("should register `requestAnimationFrame` ");
-//}
-
 fn request_idle_callback(f: &Closure<dyn FnMut()>) {
     web_sys::window()
         .unwrap()
@@ -97,12 +95,22 @@ fn request_idle_callback(f: &Closure<dyn FnMut()>) {
         .expect("should register `requestIdleCallback` ");
 }
 
+fn hoge<F>(callback: F) -> ()
+where
+    F: Fn(i32, i32) -> i32 + 'static,
+{
+    callback(1, 2);
+}
+
+static shouldRender: bool = false;
+
 #[wasm_bindgen]
 pub fn render(id: &str) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let container = document.get_element_by_id(id).expect("no id `container`");
 
+    hoge(|a, b| a + b);
     let closure = Box::new(move |event: web_sys::Event| {
         web_sys::console::log_1(&"onclick!".into());
     }) as Box<dyn FnMut(_)>;
@@ -132,18 +140,11 @@ pub fn render(id: &str) -> Result<(), JsValue> {
                 event_handlers: vec![],
                 children: vec![VNode {
                     vnode_type: VNodeType::Element,
-                    node_type: NodeType::Div,
-                    value: "",
+                    node_type: NodeType::Button,
+                    value: "ボタンだよ",
                     attributes: vec![],
-                    event_handlers: vec![],
-                    children: vec![VNode {
-                        vnode_type: VNodeType::Element,
-                        node_type: NodeType::Button,
-                        value: "ボタンだよ",
-                        attributes: vec![],
-                        event_handlers: vec![(EventHandler::OnClick, closure)],
-                        children: vec![],
-                    }],
+                    event_handlers: vec![(EventHandler::OnClick, closure)],
+                    children: vec![],
                 }],
             },
         ],
@@ -163,7 +164,9 @@ pub fn render(id: &str) -> Result<(), JsValue> {
                 .unwrap(),
             None => container.append_child(&create_element(v)).unwrap(),
         };
-        request_idle_callback(f.borrow().as_ref().unwrap());
+        if shouldRender {
+            request_idle_callback(f.borrow().as_ref().unwrap());
+        }
     }) as Box<dyn FnMut()>));
     request_idle_callback(g.borrow().as_ref().unwrap());
     Ok(())
