@@ -2,6 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 extern crate wasm_bindgen;
 use wasm_bindgen::{prelude::*, JsCast};
 extern crate web_sys;
+use web_sys::Node;
 
 #[wasm_bindgen]
 pub fn greeting() -> String {
@@ -36,11 +37,11 @@ enum EventHandler {
 
 struct VNode {
     vnode_type: VNodeType,
-    node_type: NodeType, //tag_nameとかでも良いかも
+    node_type: NodeType,
     value: &'static str,
     attributes: Vec<(String, String)>,
     //event_handlers: Vec<(EventHandler, Closure<dyn FnMut(web_sys::Event)>)>,
-    event_handlers: Vec<(EventHandler, Box<dyn FnMut(web_sys::Event)>)>,
+    //event_handlers: Vec<(EventHandler, Box<dyn FnMut(web_sys::Event)>)>,
     children: Vec<VNode>,
 }
 
@@ -59,27 +60,6 @@ fn create_element(vnode: &VNode) -> web_sys::Node {
             for (key, value) in &vnode.attributes {
                 element.set_attribute(&key, &value).unwrap();
             }
-
-            for (event, handler) in &vnode.event_handlers {
-                //let closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
-                //}) as Box<dyn FnMut(_)>);
-                let closure = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
-                    web_sys::console::log_1(&"onclick!".into());
-                }) as Box<dyn FnMut(_)>);
-
-                match event {
-                    EventHandler::OnClick => {
-                        element
-                            .add_event_listener_with_callback(
-                                "click",
-                                &closure.as_ref().unchecked_ref(),
-                            )
-                            .unwrap();
-                    }
-                };
-                closure.forget();
-            }
-
             for child in &vnode.children {
                 element.append_child(&create_element(&child)).unwrap();
             }
@@ -95,79 +75,75 @@ fn request_idle_callback(f: &Closure<dyn FnMut()>) {
         .expect("should register `requestIdleCallback` ");
 }
 
-fn hoge<F>(callback: F) -> ()
-where
-    F: Fn(i32, i32) -> i32 + 'static,
-{
-    callback(1, 2);
+pub trait Component {
+    type State;
+    fn render(&self, id: &str) -> Result<(), JsValue>;
+    fn mount(&self, id: &str) -> Result<(), JsValue>;
+    fn get_state(&self) -> &Self::State;
+    fn set_state(&mut self, state: Self::State);
 }
 
-static shouldRender: bool = false;
+struct AppState {
+    counter: i32,
+}
+struct App {
+    state: AppState,
+}
+impl Component for App {
+    type State = AppState;
+
+    fn render(&self, id: &str) -> Result<(), JsValue> {
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+        let container = document.get_element_by_id(id).expect("no id `container`");
+        let closure = Box::new(move |event: web_sys::Event| {
+            web_sys::console::log_1(&"dummy callback".into());
+        }) as Box<dyn FnMut(_)>;
+        let vnode = Rc::new(RefCell::new(VNode {
+            vnode_type: VNodeType::Element,
+            node_type: NodeType::Button,
+            value: "ボタンだよ",
+            attributes: vec![],
+            children: vec![],
+        }));
+
+        let vnode = vnode.clone();
+        // Option<Closure>を後で入れる
+        let f = Rc::new(RefCell::new(None));
+        // cloneで手に入るのはRefCellの参照
+        let g = f.clone();
+        // NoneでRefCellを作っているのでSomeでくくる
+        *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
+            let v = &vnode.borrow();
+            match container.first_child() {
+                Some(first_child) => container
+                    .replace_child(&create_element(v), &first_child)
+                    .unwrap(),
+                None => container.append_child(&create_element(v)).unwrap(),
+            };
+            request_idle_callback(f.borrow().as_ref().unwrap());
+        }) as Box<dyn FnMut()>));
+        request_idle_callback(g.borrow().as_ref().unwrap());
+        Ok(())
+    }
+
+    fn mount(&self, id: &str) -> Result<(), JsValue> {
+        Ok(())
+    }
+
+    fn set_state(&mut self, state: Self::State) {
+        self.state = state
+    }
+    fn get_state(&self) -> &Self::State {
+        &self.state
+    }
+}
 
 #[wasm_bindgen]
 pub fn render(id: &str) -> Result<(), JsValue> {
-    let window = web_sys::window().unwrap();
-    let document = window.document().unwrap();
-    let container = document.get_element_by_id(id).expect("no id `container`");
-
-    hoge(|a, b| a + b);
-    let closure = Box::new(move |event: web_sys::Event| {
-        web_sys::console::log_1(&"onclick!".into());
-    }) as Box<dyn FnMut(_)>;
-    //let closure = Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
-    //    web_sys::console::log_1(&"onclick!".into());
-    //}) as Box<dyn FnMut(_)>);
-    let vnode_rc = Rc::new(RefCell::new(VNode {
-        vnode_type: VNodeType::Element,
-        node_type: NodeType::Div,
-        value: "topノード",
-        attributes: vec![("id".to_string(), "hoge".to_string())],
-        event_handlers: vec![],
-        children: vec![
-            VNode {
-                vnode_type: VNodeType::TextElement,
-                node_type: NodeType::Div,
-                value: "child1だよ",
-                attributes: vec![],
-                event_handlers: vec![],
-                children: vec![],
-            },
-            VNode {
-                vnode_type: VNodeType::Element,
-                node_type: NodeType::Div,
-                value: "child2だよ",
-                attributes: vec![],
-                event_handlers: vec![],
-                children: vec![VNode {
-                    vnode_type: VNodeType::Element,
-                    node_type: NodeType::Button,
-                    value: "ボタンだよ",
-                    attributes: vec![],
-                    event_handlers: vec![(EventHandler::OnClick, closure)],
-                    children: vec![],
-                }],
-            },
-        ],
-    }));
-
-    let vnode = vnode_rc.clone();
-    // Option<Closure>を後で入れる
-    let f = Rc::new(RefCell::new(None));
-    // cloneで手に入るのはRefCellの参照
-    let g = f.clone();
-    // NoneでRefCellを作っているのでSomeでくくる
-    *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        let v = &vnode.borrow();
-        match container.first_child() {
-            Some(first_child) => container
-                .replace_child(&create_element(v), &first_child)
-                .unwrap(),
-            None => container.append_child(&create_element(v)).unwrap(),
-        };
-        if shouldRender {
-            request_idle_callback(f.borrow().as_ref().unwrap());
-        }
-    }) as Box<dyn FnMut()>));
-    request_idle_callback(g.borrow().as_ref().unwrap());
+    let app = App {
+        state: AppState { counter: 0 },
+    };
+    app.render(id);
     Ok(())
 }
