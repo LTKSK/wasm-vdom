@@ -75,10 +75,9 @@ fn request_idle_callback(f: &Closure<dyn FnMut()>) {
         .expect("should register `requestIdleCallback` ");
 }
 
-pub trait Component {
+pub trait Component: 'static {
     type State;
-    fn render(&self, id: &str) -> Result<(), JsValue>;
-    fn mount(&self, id: &str) -> Result<(), JsValue>;
+    fn render(&mut self, id: &str) -> Result<(), JsValue>;
     fn get_state(&self) -> &Self::State;
     fn set_state(&mut self, state: Self::State);
 }
@@ -86,19 +85,25 @@ pub trait Component {
 struct AppState {
     counter: i32,
 }
+
+type State = Rc<RefCell<AppState>>;
 struct App {
     state: AppState,
 }
 impl Component for App {
     type State = AppState;
 
-    fn render(&self, id: &str) -> Result<(), JsValue> {
+    fn render(&mut self, id: &str) -> Result<(), JsValue> {
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();
         let container = document.get_element_by_id(id).expect("no id `container`");
-        let closure = Box::new(move |event: web_sys::Event| {
-            web_sys::console::log_1(&"dummy callback".into());
-        }) as Box<dyn FnMut(_)>;
+        //let closure = Closure::wrap(Box::new(move |event: web_sys::Event| {
+        //    &self.set_state(Self::State {
+        //        counter: &self.state.counter + 1,
+        //    });
+        //    web_sys::console::log_1(&"update state".into());
+        //}) as Box<dyn FnMut(_)>);
+
         let vnode = Rc::new(RefCell::new(VNode {
             vnode_type: VNodeType::Element,
             node_type: NodeType::Button,
@@ -115,19 +120,15 @@ impl Component for App {
         // NoneでRefCellを作っているのでSomeでくくる
         *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
             let v = &vnode.borrow();
+            let el = create_element(v);
+            //el.add_event_listener_with_callback("click", closure.as_ref().unchecked_ref());
             match container.first_child() {
-                Some(first_child) => container
-                    .replace_child(&create_element(v), &first_child)
-                    .unwrap(),
-                None => container.append_child(&create_element(v)).unwrap(),
+                Some(first_child) => container.replace_child(&el, &first_child).unwrap(),
+                None => container.append_child(&el).unwrap(),
             };
             request_idle_callback(f.borrow().as_ref().unwrap());
         }) as Box<dyn FnMut()>));
         request_idle_callback(g.borrow().as_ref().unwrap());
-        Ok(())
-    }
-
-    fn mount(&self, id: &str) -> Result<(), JsValue> {
         Ok(())
     }
 
@@ -141,7 +142,7 @@ impl Component for App {
 
 #[wasm_bindgen]
 pub fn render(id: &str) -> Result<(), JsValue> {
-    let app = App {
+    let mut app = App {
         state: AppState { counter: 0 },
     };
     app.render(id);
